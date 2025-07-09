@@ -19,23 +19,27 @@ from .session import Session
 from .state import State
 from .vertex_ai_session_service import VertexAiSessionService
 
-logger = logging.getLogger('google_adk.' + __name__)
+logger = logging.getLogger("google_adk." + __name__)
 
 
 __all__ = [
-    'BaseSessionService',
-    'InMemorySessionService',
-    'Session',
-    'State',
-    'VertexAiSessionService',
+    "BaseSessionService",
+    "InMemorySessionService",
+    "Session",
+    "State",
+    "VertexAiSessionService",
 ]
 
 try:
-  from .database_session_service import DatabaseSessionService
+    from .database_async_session_service import (
+        DatabaseAsyncSessionService,  # noqa: F401
+    )
+    from .database_session_service import DatabaseSessionService  # noqa: F401
 
-  __all__.append('DatabaseSessionService')
+    __all__.append("DatabaseSessionService")
+    __all__.append("DatabaseAsyncSessionService")
 except ImportError:
-  logger.debug(
-      'DatabaseSessionService require sqlalchemy>=2.0, please ensure it is'
-      ' installed correctly.'
-  )
+    logger.debug(
+        "DatabaseSessionService require sqlalchemy>=2.0, please ensure it is"
+        " installed correctly."
+    )
