@@ -12,11 +12,11 @@ class DynamicJSON(TypeDecorator):
 
     def load_dialect_impl(self, dialect: Dialect):
         if dialect.name == "postgresql":
-            return dialect.type_descriptor(postgresql.JSONB)
+            return dialect.type_descriptor(postgresql.JSONB())
         if dialect.name == "mysql":
             # Use LONGTEXT for MySQL to address the data too long issue
-            return dialect.type_descriptor(mysql.LONGTEXT)
-        return dialect.type_descriptor(Text)  # Default to Text for other dialects
+            return dialect.type_descriptor(mysql.LONGTEXT())
+        return dialect.type_descriptor(Text())  # Default to Text for other dialects
 
     def process_bind_param(self, value, dialect: Dialect):
         if value is not None:
@@ -40,7 +40,7 @@ class PreciseTimestamp(TypeDecorator):
     impl = DateTime
     cache_ok = True
 
-    def load_dialect_impl(self, dialect):
+    def load_dialect_impl(self, dialect: Dialect):
         if dialect.name == "mysql":
-            return dialect.type_descriptor(mysql.DATETIME(fsp=6))
-        return self.impl
+            return dialect.type_descriptor(mysql.DATETIME(timezone=False, fsp=6))
+        return dialect.type_descriptor(DateTime(timezone=False))

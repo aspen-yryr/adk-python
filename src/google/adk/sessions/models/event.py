@@ -7,7 +7,7 @@ from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import PickleType, String
 
-from ...events import Event
+from ...events import Event, EventActions
 from .. import _session_util
 from ..session import Session
 from .base import Base
@@ -117,6 +117,8 @@ class StorageEvent(Base):
         return storage_event
 
     def to_event(self) -> Event:
+        assert isinstance(self.actions, EventActions)
+
         return Event(
             id=self.id,
             invocation_id=self.invocation_id,

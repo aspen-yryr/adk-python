@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func
@@ -35,8 +36,8 @@ class StorageSession(Base):
         MutableDict.as_mutable(DynamicJSON), default={}
     )
 
-    create_time: Mapped[DateTime] = mapped_column(DateTime(), default=func.now())
-    update_time: Mapped[DateTime] = mapped_column(
+    create_time: Mapped[datetime] = mapped_column(DateTime(), default=func.now())
+    update_time: Mapped[datetime] = mapped_column(
         DateTime(), default=func.now(), onupdate=func.now()
     )
 

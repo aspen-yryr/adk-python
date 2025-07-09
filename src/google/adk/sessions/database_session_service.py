@@ -21,6 +21,7 @@ from typing import Any, Optional
 from sqlalchemy import delete
 from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import ArgumentError
+from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Session as DatabaseSessionFactory
 from sqlalchemy.orm import sessionmaker
@@ -110,8 +111,12 @@ class DatabaseSessionService(BaseSessionService):
                 StorageUserState, (app_name, user_id)
             )
 
-            app_state = storage_app_state.state if storage_app_state else {}
-            user_state = storage_user_state.state if storage_user_state else {}
+            app_state = (
+                storage_app_state.state if storage_app_state else MutableDict({})
+            )
+            user_state = (
+                storage_user_state.state if storage_user_state else MutableDict({})
+            )
 
             # Create state tables if not exist
             if not storage_app_state:
@@ -125,7 +130,7 @@ class DatabaseSessionService(BaseSessionService):
 
             # Extract state deltas
             app_state_delta, user_state_delta, session_state = _extract_state_delta(
-                state
+                state or {}
             )
 
             # Apply state delta
@@ -184,7 +189,7 @@ class DatabaseSessionService(BaseSessionService):
                 after_dt = datetime.fromtimestamp(config.after_timestamp)
                 timestamp_filter = StorageEvent.timestamp >= after_dt
             else:
-                timestamp_filter = True
+                timestamp_filter = StorageEvent.id == StorageEvent.id  # No filter
 
             storage_events = (
                 session_factory.query(StorageEvent)
@@ -248,7 +253,7 @@ class DatabaseSessionService(BaseSessionService):
 
     @override
     async def delete_session(
-        self, app_name: str, user_id: str, session_id: str
+        self, *, app_name: str, user_id: str, session_id: str
     ) -> None:
         with self.database_session_factory() as session_factory:
             stmt = delete(StorageSession).where(
@@ -273,6 +278,9 @@ class DatabaseSessionService(BaseSessionService):
             storage_session = session_factory.get(
                 StorageSession, (session.app_name, session.user_id, session.id)
             )
+            assert storage_session is not None, (
+                f"Session {session.id} not found in storage for app {session.app_name} and user {session.user_id}."
+            )
 
             if storage_session.update_time.timestamp() > session.last_update_time:
                 raise ValueError(
@@ -288,9 +296,13 @@ class DatabaseSessionService(BaseSessionService):
             storage_user_state = session_factory.get(
                 StorageUserState, (session.app_name, session.user_id)
             )
+            if storage_app_state is None or storage_user_state is None:
+                raise ValueError(
+                    f"App state or user state not found for app {session.app_name} and user {session.user_id}."
+                )
 
-            app_state = storage_app_state.state if storage_app_state else {}
-            user_state = storage_user_state.state if storage_user_state else {}
+            app_state = storage_app_state.state
+            user_state = storage_user_state.state
             session_state = storage_session.state
 
             # Extract state delta
