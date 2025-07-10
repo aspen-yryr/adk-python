@@ -653,7 +653,10 @@ def cli_web(
 
   session_service_uri = session_service_uri or session_db_url
   artifact_service_uri = artifact_service_uri or artifact_storage_uri
-  app = get_fast_api_app(
+
+  loop = asyncio.get_event_loop()
+  app = loop.run_until_complete(
+    get_fast_api_app(
       agents_dir=agents_dir,
       session_service_uri=session_service_uri,
       artifact_service_uri=artifact_service_uri,
@@ -663,6 +666,7 @@ def cli_web(
       web=True,
       trace_to_cloud=trace_to_cloud,
       lifespan=_lifespan,
+    )
   )
   config = uvicorn.Config(
       app,
@@ -670,9 +674,10 @@ def cli_web(
       port=port,
       reload=reload,
   )
-
   server = uvicorn.Server(config)
-  server.run()
+
+  server.config.setup_event_loop()
+  loop.run_until_complete(server.serve())
 
 
 @main.command("api_server")
@@ -723,23 +728,30 @@ def cli_api_server(
 
   session_service_uri = session_service_uri or session_db_url
   artifact_service_uri = artifact_service_uri or artifact_storage_uri
+
+  loop = asyncio.get_event_loop()
+  app = loop.run_until_complete(
+    get_fast_api_app(
+      agents_dir=agents_dir,
+      session_service_uri=session_service_uri,
+      artifact_service_uri=artifact_service_uri,
+      memory_service_uri=memory_service_uri,
+      eval_storage_uri=eval_storage_uri,
+      allow_origins=allow_origins,
+      web=False,
+      trace_to_cloud=trace_to_cloud,
+    )
+  )
   config = uvicorn.Config(
-      get_fast_api_app(
-          agents_dir=agents_dir,
-          session_service_uri=session_service_uri,
-          artifact_service_uri=artifact_service_uri,
-          memory_service_uri=memory_service_uri,
-          eval_storage_uri=eval_storage_uri,
-          allow_origins=allow_origins,
-          web=False,
-          trace_to_cloud=trace_to_cloud,
-      ),
+      app,
       host=host,
       port=port,
       reload=reload,
   )
   server = uvicorn.Server(config)
-  server.run()
+
+  server.config.setup_event_loop()
+  loop.run_until_complete(server.serve())
 
 
 @deploy.command("cloud_run")

@@ -27,7 +27,6 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.ext.mutable import MutableDict
-from sqlalchemy.inspection import inspect
 from sqlalchemy.schema import MetaData
 from typing_extensions import override
 from tzlocal import get_localzone
@@ -81,16 +80,18 @@ class DatabaseAsyncSessionService(BaseSessionService):
 
         self.db_engine: AsyncEngine = db_engine
         self.metadata: MetaData = MetaData()
-        self.inspector = inspect(self.db_engine)
 
         # DB session factory method
         self.database_session_factory: async_sessionmaker[AsyncSession] = (
             async_sessionmaker(bind=self.db_engine)
         )
 
-        # TODO: Handle migrations with Alembic or similar tool
-        # NOTE: Allows callers to use the constructor in the same code as DatabaseSessionService
-        Base.metadata.create_all(self.db_engine.sync_engine)
+    async def create_tables(self) -> None:
+        """Creates all tables in the database."""
+        async with self.db_engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+            await conn.commit()
+            await conn.close()
 
     @override
     async def create_session(
