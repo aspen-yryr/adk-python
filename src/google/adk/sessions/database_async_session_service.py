@@ -15,8 +15,9 @@ from __future__ import annotations
 
 import copy
 import logging
+from contextlib import asynccontextmanager
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any, AsyncGenerator, Optional
 
 from sqlalchemy import delete, select
 from sqlalchemy.exc import ArgumentError
@@ -56,8 +57,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
     def __init__(self, db_url: str, **kwargs: Any):
         """Initializes the database session service with a database URL."""
         # 1. Create DB engine for db connection
-        # 2. Create all tables based on schema
-        # 3. Initialize all properties
+        self.db_url = db_url
 
         try:
             db_engine = create_async_engine(db_url, **kwargs)
@@ -86,6 +86,20 @@ class DatabaseAsyncSessionService(BaseSessionService):
             async_sessionmaker(bind=self.db_engine)
         )
 
+    @asynccontextmanager
+    async def database_session(self) -> AsyncGenerator[AsyncSession, None]:
+        """Context manager for database session."""
+        async with async_sessionmaker(
+            bind=create_async_engine(self.db_url)
+        )() as session:
+            try:
+                yield session
+            except Exception as e:
+                await session.rollback()
+                raise e
+            finally:
+                await session.close()
+
     async def create_tables(self) -> None:
         """Creates all tables in the database."""
         async with self.db_engine.begin() as conn:
@@ -108,7 +122,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
         # 4. Build the session object with generated id
         # 5. Return the session
 
-        async with self.database_session_factory() as db_session:
+        async with self.database_session() as db_session:
             # Fetch app and user states from storage
             storage_app_state = await db_session.get(StorageAppState, (app_name))
             storage_user_state = await db_session.get(
@@ -183,7 +197,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
         # 1. Get the storage session entry from session table
         # 2. Get all the events based on session id and filtering config
         # 3. Convert and return the session
-        async with self.database_session_factory() as db_session:
+        async with self.database_session() as db_session:
             storage_session = await db_session.get(
                 StorageSession, (app_name, user_id, session_id)
             )
@@ -239,7 +253,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
     async def list_sessions(
         self, *, app_name: str, user_id: str
     ) -> ListSessionsResponse:
-        async with self.database_session_factory() as db_session:
+        async with self.database_session() as db_session:
             stmt = (
                 select(StorageSession)
                 .where(
@@ -265,7 +279,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
     async def delete_session(
         self, *, app_name: str, user_id: str, session_id: str
     ) -> None:
-        async with self.database_session_factory() as db_session:
+        async with self.database_session() as db_session:
             stmt = delete(StorageSession).where(
                 StorageSession.app_name == app_name,
                 StorageSession.user_id == user_id,
@@ -284,7 +298,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
         # 1. Check if timestamp is stale
         # 2. Update session attributes based on event config
         # 3. Store event to table
-        async with self.database_session_factory() as db_session:
+        async with self.database_session() as db_session:
             storage_session = await db_session.get(
                 StorageSession, (session.app_name, session.user_id, session.id)
             )
