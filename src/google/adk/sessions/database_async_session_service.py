@@ -89,9 +89,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
     @asynccontextmanager
     async def database_session(self) -> AsyncGenerator[AsyncSession, None]:
         """Context manager for database session."""
-        async with async_sessionmaker(
-            bind=create_async_engine(self.db_url)
-        )() as session:
+        async with self.database_session_factory() as session:
             try:
                 yield session
             except Exception as e:
