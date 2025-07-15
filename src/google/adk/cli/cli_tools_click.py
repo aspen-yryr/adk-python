@@ -31,12 +31,12 @@ import uvicorn
 from . import cli_create
 from . import cli_deploy
 from .. import version
+from ..evaluation.constants import MISSING_EVAL_DEPENDENCIES_MESSAGE
 from ..evaluation.gcs_eval_set_results_manager import GcsEvalSetResultsManager
 from ..evaluation.gcs_eval_sets_manager import GcsEvalSetsManager
 from ..evaluation.local_eval_set_results_manager import LocalEvalSetResultsManager
 from ..sessions.in_memory_session_service import InMemorySessionService
 from .cli import run_cli
-from .cli_eval import MISSING_EVAL_DEPENDENCIES_MESSAGE
 from .fast_api import get_fast_api_app
 from .utils import envs
 from .utils import evals
@@ -576,6 +576,20 @@ def fast_api_common_options():
             " for Cloud Run."
         ),
     )
+    @click.option(
+        "--a2a",
+        is_flag=True,
+        show_default=True,
+        default=False,
+        help="Optional. Whether to enable A2A endpoint.",
+    )
+    @click.option(
+        "--reload_agents",
+        is_flag=True,
+        default=False,
+        show_default=True,
+        help="Optional. Whether to enable live reload for agents changes.",
+    )
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
       return func(*args, **kwargs)
@@ -617,6 +631,8 @@ def cli_web(
     memory_service_uri: Optional[str] = None,
     session_db_url: Optional[str] = None,  # Deprecated
     artifact_storage_uri: Optional[str] = None,  # Deprecated
+    a2a: bool = False,
+    reload_agents: bool = False,
 ):
   """Starts a FastAPI server with Web UI for agents.
 
@@ -666,6 +682,10 @@ def cli_web(
       web=True,
       trace_to_cloud=trace_to_cloud,
       lifespan=_lifespan,
+      a2a=a2a,
+      host=host,
+      port=port,
+      reload_agents=reload_agents,
     )
   )
   config = uvicorn.Config(
@@ -714,6 +734,8 @@ def cli_api_server(
     memory_service_uri: Optional[str] = None,
     session_db_url: Optional[str] = None,  # Deprecated
     artifact_storage_uri: Optional[str] = None,  # Deprecated
+    a2a: bool = False,
+    reload_agents: bool = False,
 ):
   """Starts a FastAPI server for agents.
 
@@ -732,15 +754,19 @@ def cli_api_server(
   loop = asyncio.get_event_loop()
   app = loop.run_until_complete(
     get_fast_api_app(
-      agents_dir=agents_dir,
-      session_service_uri=session_service_uri,
-      artifact_service_uri=artifact_service_uri,
-      memory_service_uri=memory_service_uri,
-      eval_storage_uri=eval_storage_uri,
-      allow_origins=allow_origins,
-      web=False,
-      trace_to_cloud=trace_to_cloud,
-    )
+          agents_dir=agents_dir,
+          session_service_uri=session_service_uri,
+          artifact_service_uri=artifact_service_uri,
+          memory_service_uri=memory_service_uri,
+          eval_storage_uri=eval_storage_uri,
+          allow_origins=allow_origins,
+          web=False,
+          trace_to_cloud=trace_to_cloud,
+          a2a=a2a,
+          host=host,
+          port=port,
+          reload_agents=reload_agents,
+      ),
   )
   config = uvicorn.Config(
       app,
@@ -828,15 +854,6 @@ def cli_api_server(
         " version in the dev environment)"
     ),
 )
-@click.option(
-    "--eval_storage_uri",
-    type=str,
-    help=(
-        "Optional. The evals storage URI to store agent evals,"
-        " supported URIs: gs://<bucket name>."
-    ),
-    default=None,
-)
 @adk_services_options()
 @deprecated_adk_services_options()
 @click.argument(
@@ -866,6 +883,8 @@ def cli_deploy_cloud_run(
     eval_storage_uri: Optional[str] = None,
     session_db_url: Optional[str] = None,  # Deprecated
     artifact_storage_uri: Optional[str] = None,  # Deprecated
+    a2a: bool = False,
+    reload_agents: bool = False,
 ):
   """Deploys an agent to Cloud Run.
 
@@ -896,6 +915,7 @@ def cli_deploy_cloud_run(
         session_service_uri=session_service_uri,
         artifact_service_uri=artifact_service_uri,
         memory_service_uri=memory_service_uri,
+        a2a=a2a,
     )
   except Exception as e:
     click.secho(f"Deploy failed: {e}", fg="red", err=True)

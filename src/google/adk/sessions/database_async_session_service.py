@@ -179,7 +179,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
                 user_id=str(storage_session.user_id),
                 id=str(storage_session.id),
                 state=merged_state,
-                last_update_time=storage_session.update_time.timestamp(),
+                last_update_time=storage_session.update_timestamp_tz,
             )
             return session
 
@@ -211,7 +211,9 @@ class DatabaseAsyncSessionService(BaseSessionService):
             stmt = (
                 select(StorageEvent)
                 .where(
+                    StorageEvent.app_name == app_name,
                     StorageEvent.session_id == storage_session.id,
+                    StorageEvent.user_id == user_id,
                     timestamp_filter,
                 )
                 .order_by(StorageEvent.timestamp.desc())
@@ -242,7 +244,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
                 user_id=user_id,
                 id=session_id,
                 state=merged_state,
-                last_update_time=storage_session.update_time.timestamp(),
+                last_update_time=storage_session.update_timestamp_tz,
             )
             session.events = [e.to_event() for e in reversed(storage_events)]
         return session
@@ -268,7 +270,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
                     user_id=user_id,
                     id=storage_session.id,
                     state={},
-                    last_update_time=storage_session.update_time.timestamp(),
+                    last_update_time=storage_session.update_timestamp_tz,
                 )
                 sessions.append(session)
             return ListSessionsResponse(sessions=sessions)
@@ -304,13 +306,13 @@ class DatabaseAsyncSessionService(BaseSessionService):
                 f"Session {session.id} not found in storage for app {session.app_name} and user {session.user_id}."
             )
 
-            if storage_session.update_time.timestamp() > session.last_update_time:
+            if storage_session.update_timestamp_tz > session.last_update_time:
                 raise ValueError(
                     "The last_update_time provided in the session object"
                     f" {datetime.fromtimestamp(session.last_update_time):'%Y-%m-%d %H:%M:%S'} is"
                     " earlier than the update_time in the storage_session"
-                    f" {storage_session.update_time:'%Y-%m-%d %H:%M:%S'}. Please check"
-                    " if it is a stale session."
+                    f" {datetime.fromtimestamp(storage_session.update_timestamp_tz):'%Y-%m-%d %H:%M:%S'}."
+                    " Please check if it is a stale session."
                 )
 
             # Fetch states from storage
@@ -356,7 +358,7 @@ class DatabaseAsyncSessionService(BaseSessionService):
             await db_session.refresh(storage_session)
 
             # Update timestamp with commit time
-            session.last_update_time = storage_session.update_time.timestamp()
+            session.last_update_time = storage_session.update_timestamp_tz
 
         # Also update the in-memory session
         await super().append_event(session=session, event=event)

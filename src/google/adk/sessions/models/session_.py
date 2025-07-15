@@ -1,9 +1,10 @@
 import uuid
-from datetime import datetime
-from typing import TYPE_CHECKING, Any
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any, Optional
 
 from sqlalchemy import func
 from sqlalchemy.ext.mutable import MutableDict
+from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import DateTime, String
 
@@ -48,3 +49,22 @@ class StorageSession(Base):
 
     def __repr__(self):
         return f"<StorageSession(id={self.id}, update_time={self.update_time})>"
+
+    @property
+    def _dialect_name(self) -> Optional[str]:
+        session = inspect(self).session
+        if session is None:
+            return None
+        assert session.bind is not None, "Session must have a bound engine."
+
+        return session.bind.dialect.name
+
+    @property
+    def update_timestamp_tz(self) -> float:
+        """Returns the time zone aware update timestamp."""
+        if self._dialect_name == "sqlite":
+            # SQLite does not support timezone. SQLAlchemy returns a naive datetime
+            # object without timezone information. We need to convert it to UTC
+            # manually.
+            return self.update_time.replace(tzinfo=timezone.utc).timestamp()
+        return self.update_time.timestamp()

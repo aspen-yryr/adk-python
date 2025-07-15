@@ -20,8 +20,10 @@ from typing import Any
 from typing import AsyncGenerator
 from typing import Awaitable
 from typing import Callable
+from typing import Dict
 from typing import Literal
 from typing import Optional
+from typing import Type
 from typing import Union
 
 from google.genai import types
@@ -48,7 +50,9 @@ from ..tools.base_tool import BaseTool
 from ..tools.base_toolset import BaseToolset
 from ..tools.function_tool import FunctionTool
 from ..tools.tool_context import ToolContext
+from ..utils.feature_decorator import working_in_progress
 from .base_agent import BaseAgent
+from .base_agent import BaseAgentConfig
 from .callback_context import CallbackContext
 from .invocation_context import InvocationContext
 from .readonly_context import ReadonlyContext
@@ -431,16 +435,31 @@ class LlmAgent(BaseAgent):
 
   def __maybe_save_output_to_state(self, event: Event):
     """Saves the model output to state if needed."""
+    # skip if the event was authored by some other agent (e.g. current agent
+    # transferred to another agent)
+    if event.author != self.name:
+      logger.debug(
+          'Skipping output save for agent %s: event authored by %s',
+          self.name,
+          event.author,
+      )
+      return
     if (
         self.output_key
         and event.is_final_response()
         and event.content
         and event.content.parts
     ):
+
       result = ''.join(
           [part.text if part.text else '' for part in event.content.parts]
       )
       if self.output_schema:
+        # If the result from the final chunk is just whitespace or empty,
+        # it means this is an empty final chunk of a stream.
+        # Do not attempt to parse it as JSON.
+        if not result.strip():
+          return
         result = self.output_schema.model_validate_json(result).model_dump(
             exclude_none=True
         )
@@ -501,5 +520,55 @@ class LlmAgent(BaseAgent):
       )
     return generate_content_config
 
+  @classmethod
+  @override
+  @working_in_progress('LlmAgent.from_config is not ready for use.')
+  def from_config(
+      cls: Type[LlmAgent],
+      config: LlmAgentConfig,
+      config_abs_path: str,
+  ) -> LlmAgent:
+    agent = super().from_config(config, config_abs_path)
+    if config.model:
+      agent.model = config.model
+    if config.instruction:
+      agent.instruction = config.instruction
+    if config.disallow_transfer_to_parent:
+      agent.disallow_transfer_to_parent = config.disallow_transfer_to_parent
+    if config.disallow_transfer_to_peers:
+      agent.disallow_transfer_to_peers = config.disallow_transfer_to_peers
+    if config.include_contents != 'default':
+      agent.include_contents = config.include_contents
+    if config.output_key:
+      agent.output_key = config.output_key
+    return agent
+
 
 Agent: TypeAlias = LlmAgent
+
+
+class LlmAgentConfig(BaseAgentConfig):
+  """The config for the YAML schema of a LlmAgent."""
+
+  agent_class: Literal['LlmAgent', ''] = 'LlmAgent'
+  """The value is used to uniquely identify the LlmAgent class. If it is
+  empty, it is by default an LlmAgent."""
+
+  model: Optional[str] = None
+  """Optional. LlmAgent.model. If not set, the model will be inherited from
+  the ancestor."""
+
+  instruction: str
+  """Required. LlmAgent.instruction."""
+
+  disallow_transfer_to_parent: Optional[bool] = None
+  """Optional. LlmAgent.disallow_transfer_to_parent."""
+
+  disallow_transfer_to_peers: Optional[bool] = None
+  """Optional. LlmAgent.disallow_transfer_to_peers."""
+
+  output_key: Optional[str] = None
+  """Optional. LlmAgent.output_key."""
+
+  include_contents: Literal['default', 'none'] = 'default'
+  """Optional. LlmAgent.include_contents."""
