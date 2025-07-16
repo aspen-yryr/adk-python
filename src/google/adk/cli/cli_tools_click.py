@@ -672,21 +672,21 @@ def cli_web(
 
   loop = asyncio.get_event_loop()
   app = loop.run_until_complete(
-    get_fast_api_app(
-      agents_dir=agents_dir,
-      session_service_uri=session_service_uri,
-      artifact_service_uri=artifact_service_uri,
-      memory_service_uri=memory_service_uri,
-      eval_storage_uri=eval_storage_uri,
-      allow_origins=allow_origins,
-      web=True,
-      trace_to_cloud=trace_to_cloud,
-      lifespan=_lifespan,
-      a2a=a2a,
-      host=host,
-      port=port,
-      reload_agents=reload_agents,
-    )
+      get_fast_api_app(
+          agents_dir=agents_dir,
+          session_service_uri=session_service_uri,
+          artifact_service_uri=artifact_service_uri,
+          memory_service_uri=memory_service_uri,
+          eval_storage_uri=eval_storage_uri,
+          allow_origins=allow_origins,
+          web=True,
+          trace_to_cloud=trace_to_cloud,
+          lifespan=_lifespan,
+          a2a=a2a,
+          host=host,
+          port=port,
+          reload_agents=reload_agents,
+      )
   )
   config = uvicorn.Config(
       app,
@@ -753,7 +753,7 @@ def cli_api_server(
 
   loop = asyncio.get_event_loop()
   app = loop.run_until_complete(
-    get_fast_api_app(
+      get_fast_api_app(
           agents_dir=agents_dir,
           session_service_uri=session_service_uri,
           artifact_service_uri=artifact_service_uri,

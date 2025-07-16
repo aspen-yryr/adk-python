@@ -36,6 +36,7 @@ import pytest
 from pytest_mock import MockerFixture
 import uvicorn
 
+
 # Helpers
 class _Recorder(BaseModel):
   """Callable that records every invocation."""
@@ -190,15 +191,17 @@ def test_cli_eval_missing_deps_raises(
 
 # cli web & api_server (uvicorn patched)
 @pytest.fixture()
-def _patch_uvicorn(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> _Recorder:
+def _patch_uvicorn(
+    monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture
+) -> _Recorder:
   """Patch uvicorn.Config/Server to avoid real network operations."""
   rec = _Recorder()
 
   config_mock: uvicorn.Config = mocker.MagicMock()
   mocker.patch.object(
-    config_mock,
-    "setup_event_loop",
-    return_value=None,
+      config_mock,
+      "setup_event_loop",
+      return_value=None,
   )
 
   class _DummyServer:
@@ -211,13 +214,13 @@ def _patch_uvicorn(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> _R
 
     config = config_mock
 
-
   monkeypatch.setattr(
       cli_tools_click.uvicorn, "Config", lambda *a, **k: config_mock
   )
   monkeypatch.setattr(
       cli_tools_click.uvicorn, "Server", lambda *_a, **_k: _DummyServer()
   )
+
   async def _dummy_get_fast_api_app(**_k):
     return object()
 
@@ -237,6 +240,7 @@ def test_cli_web_invokes_uvicorn(
   result = runner.invoke(cli_tools_click.main, ["web", str(agents_dir)])
   assert result.exit_code == 0
   assert _patch_uvicorn.calls, "uvicorn.Server.serve must be called"
+
 
 def test_cli_api_server_invokes_uvicorn(
     tmp_path: Path, _patch_uvicorn: _Recorder
