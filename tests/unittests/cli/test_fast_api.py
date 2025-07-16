@@ -419,7 +419,7 @@ def mock_eval_set_results_manager():
 
 
 @pytest.fixture
-def test_app(
+async def test_app(
     mock_session_service,
     mock_artifact_service,
     mock_memory_service,
@@ -462,7 +462,7 @@ def test_app(
       ),
   ):
     # Get the FastAPI app, but don't actually run it
-    app = get_fast_api_app(
+    app = await get_fast_api_app(
         agents_dir=".",
         web=True,
         session_service_uri="",
@@ -569,7 +569,7 @@ class TestA2AAgent(BaseAgent):
 @pytest.mark.skipif(
     sys.version_info < (3, 10), reason="A2A requires Python 3.10+"
 )
-def test_app_with_a2a(
+async def test_app_with_a2a(
     mock_session_service,
     mock_artifact_service,
     mock_memory_service,
@@ -637,7 +637,7 @@ def test_app_with_a2a(
     os.chdir(temp_agents_dir_with_a2a)
 
     try:
-      app = get_fast_api_app(
+      app = await get_fast_api_app(
           agents_dir=".",
           web=True,
           session_service_uri="",

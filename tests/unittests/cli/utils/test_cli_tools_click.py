@@ -33,7 +33,8 @@ from google.adk.evaluation import local_eval_set_results_manager
 from google.adk.sessions import Session
 from pydantic import BaseModel
 import pytest
-
+from pytest_mock import MockerFixture
+import uvicorn
 
 # Helpers
 class _Recorder(BaseModel):
@@ -189,26 +190,39 @@ def test_cli_eval_missing_deps_raises(
 
 # cli web & api_server (uvicorn patched)
 @pytest.fixture()
-def _patch_uvicorn(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
+def _patch_uvicorn(monkeypatch: pytest.MonkeyPatch, mocker: MockerFixture) -> _Recorder:
   """Patch uvicorn.Config/Server to avoid real network operations."""
   rec = _Recorder()
+
+  config_mock: uvicorn.Config = mocker.MagicMock()
+  mocker.patch.object(
+    config_mock,
+    "setup_event_loop",
+    return_value=None,
+  )
 
   class _DummyServer:
 
     def __init__(self, *a: Any, **k: Any) -> None:
       ...
 
-    def run(self) -> None:
+    async def serve(self) -> None:
       rec()
 
+    config = config_mock
+
+
   monkeypatch.setattr(
-      cli_tools_click.uvicorn, "Config", lambda *a, **k: object()
+      cli_tools_click.uvicorn, "Config", lambda *a, **k: config_mock
   )
   monkeypatch.setattr(
       cli_tools_click.uvicorn, "Server", lambda *_a, **_k: _DummyServer()
   )
+  async def _dummy_get_fast_api_app(**_k):
+    return object()
+
   monkeypatch.setattr(
-      cli_tools_click, "get_fast_api_app", lambda **_k: object()
+      cli_tools_click, "get_fast_api_app", _dummy_get_fast_api_app
   )
   return rec
 
@@ -216,25 +230,24 @@ def _patch_uvicorn(monkeypatch: pytest.MonkeyPatch) -> _Recorder:
 def test_cli_web_invokes_uvicorn(
     tmp_path: Path, _patch_uvicorn: _Recorder
 ) -> None:
-  """`adk web` should configure and start uvicorn.Server.run."""
+  """`adk web` should configure and start uvicorn.Server.serve."""
   agents_dir = tmp_path / "agents"
   agents_dir.mkdir()
   runner = CliRunner()
   result = runner.invoke(cli_tools_click.main, ["web", str(agents_dir)])
   assert result.exit_code == 0
-  assert _patch_uvicorn.calls, "uvicorn.Server.run must be called"
-
+  assert _patch_uvicorn.calls, "uvicorn.Server.serve must be called"
 
 def test_cli_api_server_invokes_uvicorn(
     tmp_path: Path, _patch_uvicorn: _Recorder
 ) -> None:
-  """`adk api_server` should configure and start uvicorn.Server.run."""
+  """`adk api_server` should configure and start uvicorn.Server.serve."""
   agents_dir = tmp_path / "agents_api"
   agents_dir.mkdir()
   runner = CliRunner()
   result = runner.invoke(cli_tools_click.main, ["api_server", str(agents_dir)])
   assert result.exit_code == 0
-  assert _patch_uvicorn.calls, "uvicorn.Server.run must be called"
+  assert _patch_uvicorn.calls, "uvicorn.Server.serve must be called"
 
 
 def test_cli_eval_success_path(
