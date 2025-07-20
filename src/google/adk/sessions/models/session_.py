@@ -14,6 +14,8 @@ from sqlalchemy.orm import relationship
 from sqlalchemy.types import DateTime
 from sqlalchemy.types import String
 
+from ...events.event import Event
+from ...sessions.session import Session
 from .base import Base
 from .constants import DEFAULT_MAX_KEY_LENGTH
 from .types import DynamicJSON
@@ -74,3 +76,23 @@ class StorageSession(Base):
       # manually.
       return self.update_time.replace(tzinfo=timezone.utc).timestamp()
     return self.update_time.timestamp()
+  
+  def to_session(
+      self,
+      state: dict[str, Any] | None = None,
+      events: list[Event] | None = None,
+  ) -> Session:
+    """Converts the storage session to a session object."""
+    if state is None:
+      state = {}
+    if events is None:
+      events = []
+
+    return Session(
+        app_name=self.app_name,
+        user_id=self.user_id,
+        id=self.id,
+        state=state,
+        events=events,
+        last_update_time=self.update_timestamp_tz,
+    )
