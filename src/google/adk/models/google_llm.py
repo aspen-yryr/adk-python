@@ -27,6 +27,7 @@ from typing import Union
 
 from google.genai import Client
 from google.genai import types
+from google.genai.types import FinishReason
 from typing_extensions import override
 
 from .. import version
@@ -67,6 +68,8 @@ class Gemini(BaseLlm):
 
     return [
         r'gemini-.*',
+        # model optimizer pattern
+        r'model-optimizer-.*',
         # fine-tuned vertex endpoint pattern
         r'projects\/.+\/locations\/.+\/endpoints\/.+',
         # vertex gemini long name
@@ -161,8 +164,12 @@ class Gemini(BaseLlm):
           parts.append(types.Part.from_text(text=text))
         yield LlmResponse(
             content=types.ModelContent(parts=parts),
-            error_code=response.candidates[0].finish_reason,
-            error_message=response.candidates[0].finish_message,
+            error_code=None
+            if response.candidates[0].finish_reason == FinishReason.STOP
+            else response.candidates[0].finish_reason,
+            error_message=None
+            if response.candidates[0].finish_reason == FinishReason.STOP
+            else response.candidates[0].finish_message,
             usage_metadata=usage_metadata,
         )
 

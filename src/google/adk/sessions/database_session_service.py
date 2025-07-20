@@ -14,14 +14,12 @@
 from __future__ import annotations
 
 import copy
-from datetime import datetime
 import logging
-from typing import Any
-from typing import Optional
+from datetime import datetime
+from typing import Any, Optional
 
 from sqlalchemy import delete
-from sqlalchemy.engine import create_engine
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, create_engine
 from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.mutable import MutableDict
 from sqlalchemy.inspection import inspect
@@ -32,14 +30,18 @@ from typing_extensions import override
 from tzlocal import get_localzone
 
 from ..events.event import Event
-from .base_session_service import BaseSessionService
-from .base_session_service import GetSessionConfig
-from .base_session_service import ListSessionsResponse
-from .models import Base
-from .models import StorageAppState
-from .models import StorageEvent
-from .models import StorageSession
-from .models import StorageUserState
+from .base_session_service import (
+  BaseSessionService,
+  GetSessionConfig,
+  ListSessionsResponse,
+)
+from .models import (
+  Base,
+  StorageAppState,
+  StorageEvent,
+  StorageSession,
+  StorageUserState,
+)
 from .session import Session
 from .state import State
 
@@ -155,14 +157,8 @@ class DatabaseSessionService(BaseSessionService):
 
       # Merge states for response
       merged_state = _merge_state(app_state, user_state, session_state)
-      session = Session(
-          app_name=str(storage_session.app_name),
-          user_id=str(storage_session.user_id),
-          id=str(storage_session.id),
-          state=merged_state,
-          last_update_time=storage_session.update_timestamp_tz,
-      )
-      return session
+      session = storage_session.to_session(state=merged_state)
+    return session
 
   @override
   async def get_session(
@@ -218,14 +214,8 @@ class DatabaseSessionService(BaseSessionService):
       merged_state = _merge_state(app_state, user_state, session_state)
 
       # Convert storage session to session
-      session = Session(
-          app_name=app_name,
-          user_id=user_id,
-          id=session_id,
-          state=merged_state,
-          last_update_time=storage_session.update_timestamp_tz,
-      )
-      session.events = [e.to_event() for e in reversed(storage_events)]
+      events = [e.to_event() for e in reversed(storage_events)]
+      session = storage_session.to_session(state=merged_state, events=events)
     return session
 
   @override
@@ -241,14 +231,7 @@ class DatabaseSessionService(BaseSessionService):
       )
       sessions = []
       for storage_session in results:
-        session = Session(
-            app_name=app_name,
-            user_id=user_id,
-            id=storage_session.id,
-            state={},
-            last_update_time=storage_session.update_timestamp_tz,
-        )
-        sessions.append(session)
+        sessions.append(storage_session.to_session())
       return ListSessionsResponse(sessions=sessions)
 
   @override

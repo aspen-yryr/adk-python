@@ -17,11 +17,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import queue
+import time
+from typing import Any
 from typing import AsyncGenerator
 from typing import Callable
 from typing import Generator
 from typing import List
 from typing import Optional
+import uuid
 import warnings
 
 from google.genai import types
@@ -38,6 +41,7 @@ from .artifacts.in_memory_artifact_service import InMemoryArtifactService
 from .auth.credential_service.base_credential_service import BaseCredentialService
 from .code_executors.built_in_code_executor import BuiltInCodeExecutor
 from .events.event import Event
+from .events.event import EventActions
 from .flows.llm_flows.functions import find_matching_function_call
 from .memory.base_memory_service import BaseMemoryService
 from .memory.in_memory_memory_service import InMemoryMemoryService
@@ -122,8 +126,9 @@ class Runner:
   ) -> Generator[Event, None, None]:
     """Runs the agent.
 
-    NOTE: This sync interface is only for local testing and convenience purpose.
-    Consider using `run_async` for production usage.
+    NOTE:
+      This sync interface is only for local testing and convenience purpose.
+      Consider using `run_async` for production usage.
 
     Args:
       user_id: The user ID of the session.
@@ -173,6 +178,7 @@ class Runner:
       user_id: str,
       session_id: str,
       new_message: types.Content,
+      state_delta: Optional[dict[str, Any]] = None,
       run_config: RunConfig = RunConfig(),
   ) -> AsyncGenerator[Event, None]:
     """Main entry method to run the agent in this runner.
@@ -215,6 +221,7 @@ class Runner:
             new_message,
             invocation_context,
             run_config.save_input_blobs_as_artifacts,
+            state_delta,
         )
 
       invocation_context.agent = self._find_agent_to_run(session, root_agent)
@@ -283,6 +290,7 @@ class Runner:
       new_message: types.Content,
       invocation_context: InvocationContext,
       save_input_blobs_as_artifacts: bool = False,
+      state_delta: Optional[dict[str, Any]] = None,
   ):
     """Appends a new message to the session.
 
@@ -314,11 +322,19 @@ class Runner:
             text=f'Uploaded file: {file_name}. It is saved into artifacts'
         )
     # Appends only. We do not yield the event because it's not from the model.
-    event = Event(
-        invocation_id=invocation_context.invocation_id,
-        author='user',
-        content=new_message,
-    )
+    if state_delta:
+      event = Event(
+          invocation_id=invocation_context.invocation_id,
+          author='user',
+          actions=EventActions(state_delta=state_delta),
+          content=new_message,
+      )
+    else:
+      event = Event(
+          invocation_id=invocation_context.invocation_id,
+          author='user',
+          content=new_message,
+      )
     await self.session_service.append_event(session=session, event=event)
 
   async def run_live(
@@ -350,7 +366,7 @@ class Runner:
         This feature is **experimental** and its API or behavior may change
         in future releases.
 
-    .. note::
+    .. NOTE::
         Either `session` or both `user_id` and `session_id` must be provided.
     """
     if session is None and (user_id is None or session_id is None):
@@ -433,9 +449,10 @@ class Runner:
     """Finds the agent to run to continue the session.
 
     A qualified agent must be either of:
+
     - The agent that returned a function call and the last user message is a
       function response to this function call.
-    - The root agent;
+    - The root agent.
     - An LlmAgent who replied last and is capable to transfer to any other agent
       in the agent hierarchy.
 
@@ -444,7 +461,8 @@ class Runner:
         root_agent: The root agent of the runner.
 
     Returns:
-      The agent of the last message in the session or the root agent.
+      The agent to run. (the active agent that should reply to the latest user
+      message)
     """
     # If the last event is a function response, should send this response to
     # the agent that returned the corressponding function call regardless the
@@ -473,8 +491,8 @@ class Runner:
   def _is_transferable_across_agent_tree(self, agent_to_run: BaseAgent) -> bool:
     """Whether the agent to run can transfer to any other agent in the agent tree.
 
-    This typically means all agent_to_run's parent through root agent can
-    transfer to their parent_agent.
+    This typically means all agent_to_run's ancestor can transfer to their
+    parent_agent all the way to the root_agent.
 
     Args:
         agent_to_run: The agent to check for transferability.
@@ -485,7 +503,7 @@ class Runner:
     agent = agent_to_run
     while agent:
       if not isinstance(agent, LlmAgent):
-        # Only LLM-based Agent can provider agent transfer capability.
+        # Only LLM-based Agent can provide agent transfer capability.
         return False
       if agent.disallow_transfer_to_parent:
         return False
